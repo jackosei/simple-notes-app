@@ -2,19 +2,37 @@ import Sidebar from "./components/Sidebar"
 import Editor from "./components/Editor"
 import { useState, useEffect } from 'react'
 import Split from "react-split"
-import {nanoid} from "nanoid"
+import { nanoid } from "nanoid"
+import { onSnapshot } from "firebase/firestore"
+import { notesCollection } from "../firebase"
+
 import './App.css'
 
 function App() {
-  const [notes, setNotes] = useState(
-    () => JSON.parse(localStorage.getItem("notes")) || []
-  )
+  const [notes, setNotes] = useState([])
   const [currentNoteId, setCurrentNoteId] = useState(
-    (notes[0] && notes[0].id) || ""
+    (notes[0]?.id) || ""
   )
 
+  const currentNote = notes.find(note => note.id === currentNoteId) || notes[0]
+
+
   useEffect(() => {
-    localStorage.setItem("notes", JSON.stringify(notes))
+    const unsubscribe = onSnapshot(notesCollection, (snapshot) => {
+      // Sync up local notes array with the snapshot data
+      const notesArr = snapshot.docs.map(doc => ({
+        ...doc.data(),
+        id: doc.id
+      }))
+
+      setNotes(notesArr)
+    })
+
+    return unsubscribe
+  }, [])
+
+  useEffect(() => {
+    console.log("hello")
   }, [notes])
 
   function createNewNote() {
@@ -44,50 +62,51 @@ function App() {
 
   }
 
-  function findCurrentNote() {
-    return notes.find(note => {
-      return note.id === currentNoteId
-    }) || notes[0]
+  function deleteNote(event, noteId) {
+    event.stopPropagation()
+    setNotes(oldNotes => oldNotes.filter(note => note.id !== noteId))
   }
+
 
   return (
     <main>
-        {
-            notes.length > 0 
-            ?
-            <Split 
-                sizes={[30, 70]} 
-                direction="horizontal" 
-                className="split"
+      {
+        notes.length > 0
+          ?
+          <Split
+            sizes={[30, 70]}
+            direction="horizontal"
+            className="split"
+          >
+            <Sidebar
+              notes={notes}
+              currentNote={currentNote}
+              setCurrentNoteId={setCurrentNoteId}
+              newNote={createNewNote}
+              deleteNote={deleteNote}
+            />
+            {
+              currentNoteId &&
+              notes.length > 0 &&
+              <Editor
+                currentNote={currentNote}
+                updateNote={updateNote}
+              />
+            }
+          </Split>
+          :
+          <div className="no-notes">
+            <h1>You have no notes</h1>
+            <button
+              className="first-note"
+              onClick={createNewNote}
             >
-                <Sidebar
-                    notes={notes}
-                    currentNote={findCurrentNote()}
-                    setCurrentNoteId={setCurrentNoteId}
-                    newNote={createNewNote}
-                />
-                {
-                    currentNoteId && 
-                    notes.length > 0 &&
-                    <Editor 
-                        currentNote={findCurrentNote()} 
-                        updateNote={updateNote} 
-                    />
-                }
-            </Split>
-            :
-            <div className="no-notes">
-                <h1>You have no notes</h1>
-                <button 
-                    className="first-note" 
-                    onClick={createNewNote}
-                >
-                    Create one now
-                </button>
-            </div>
-            
-        }
-        </main>
+              Create one now
+            </button>
+          </div>
+
+      }
+    </main>
   )
 }
 
